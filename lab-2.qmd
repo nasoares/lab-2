@@ -2,6 +2,7 @@
 title: "Lab 2"
 subtitle: "Advanced Data Visualization"
 editor: source
+embed-resources: true
 ---
 
 # Instructions
