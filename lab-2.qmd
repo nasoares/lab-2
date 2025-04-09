@@ -70,8 +70,50 @@ them in separately, but you may also just use one if it suffices.
 
 ```{r}
 #| label: read-in-wellcome-data
+library(tidyverse)
+library(readxl)
+wgm<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Full dataset")
+notes<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Data dictionary")
 
+#The "Are vaccines safe" question is Q25, people who believe they are safe have coded responses as 1 or 2 (all other number represent neutral or negative views)
 
+#creating a new, filtered data frame
+wgm_filt<-wgm|>
+  select(c(WP5,wgt,PROJWT,FIELD_DATE,YEAR_CALENDAR,Q25,Regions_Report))|>
+  filter(!is.na(Q25))
+
+#Handling the country codes
+countries<-t(str_split(notes[1,3],',',simplify = T))
+countryCode<-str_split(countries,"=",simplify=T)
+countryCode<-as.data.frame(countryCode)
+colnames(countryCode)<-c("WP5","Country")
+countryCode$WP5<-as.numeric(countryCode$WP5)
+
+#Handling the region codes
+regions<-t(str_split(notes[57,3],',',simplify=T))
+regionCode<-str_split(regions,"=",simplify=T)
+regionCode<-as.data.frame(regionCode)
+colnames(regionCode)<-c("Regions_Report","Region")
+regionCode$Regions_Report<-as.numeric(regionCode$Regions_Report)
+
+#Merging country and region names
+wgm_merge<-left_join(wgm_filt,countryCode)
+wgm_merge<-left_join(wgm_merge,regionCode)
+
+#New column for pro/anti vaccine
+wgm_merge<-wgm_merge|>
+  mutate(VacView=case_when(
+    Q25 <= 2 ~ "Pro",
+    Q25 >= 3 ~ "NotPro"
+  ))
+
+#Grouping by country for plotting
+wgm_country<-wgm_merge|>
+  group_by(Country,Region,VacView)|>
+  summarize(Count=n())
+wgm_country<-wgm_country|>
+  group_by(Country,Region)|>
+  summarize()#need proportions before plotting
 ```
 
 6. Improve the visualization above by either re-creating it with the issues you
