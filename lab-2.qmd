@@ -78,6 +78,7 @@ library(RColorBrewer)
 library(leaflet)
 library(sf)
 library(viridisLite)
+library(gganimate)
 wgm<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Full dataset")
 notes<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Data dictionary")
 
@@ -169,7 +170,7 @@ Be sure to cite both the page number and figure title. Do your best to tell the
 story of this graph in words. That is, what is this graph telling you? What do
 you think the authors meant to convey with it?
 
-I selected Chart 2.3: "Map of perceived knowledge about science by country" on page 27. This map displays the percentage of people in each country surveyed that answered "a lot" or "some" in response to being questioned on how much they know about science.
+I selected Chart 2.3: "Map of perceived knowledge about science by country" on page 27. This map displays the percentage of people in each country surveyed that answered "a lot" or "some" in response to being questioned on how much they know about science. The authors are attempting to convey how perceived scientific knowledge is distributed around the world. 
 
 8. List the variables that appear to be displayed in this visualization.
 
@@ -212,6 +213,7 @@ wgm_sci_props<-wgm_sci_country|>
 colnames(wgm_sci_props)<-c("NAME","KnowLevel")
 
 #Bringing in chloropleth of countries
+#following guidelines outlined in https://r-graph-gallery.com/183-choropleth-map-with-leaflet.html
 world_sf<-read_sf("~/Cal Poly/Spring 2025/STAT 541 - Advanced Stats with R/Lab 2/lab-2/TM_WORLD_BORDERS_SIMPL-0.3.shp")
 
 wgm_sf<-world_sf|>
@@ -252,25 +254,75 @@ Be sure to cite both the page number and figure title. Do your best to tell the
 story of this graph in words. That is, what is this graph telling you? What do
 you think the authors meant to convey with it?
 
+I chose chart 2.5 on page 29, depicting "Perceived knowledge about science by region and age group". This is expanding upon the data depicted in the map above by adding "Age Group" as a variable. The authors are showing that while there is an effect of country on knowledge level, there is also an effect of Age Group. The 15-29 age group in each region has the highest perception of scientific knowledge.
 
 14. List the variables that appear to be displayed in this visualization.
 
+The variables are region, age range, and knowledge level. 
 
 15. Now that you're versed in the grammar of graphics (ggplot), list the
 aesthetics used and which variables are specified for each.
 
-
+The aesthetics would be *x = Knowledge Level*, *y = Region* and *color = Age Range*.
 
 16. What type of graph would you call this?
 
+This would be a bar graph, *geom_bar()*
 
+17. List all of the problems or things you would improve about this graph. 
 
-17. List all of the problems or things you would improve about this graph.  
+- The spacing of the bars make it difficult to see where regions/start and end, the bars should be more clearly grouped in clusters
+- The text labels make the graph look busy and are redundant, since the bars already depict the data
+- Harsh white background
 
 18. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
 ```{r}
 #| label: third-improved-visualization
+#| message: false
+#| warning: false
 
+#Grouping by region and age category
+wgm_sci_region<-wgm_sci|>
+  filter(!is.na(AgeCategories))|>
+  group_by(Region,AgeCategories,SciKnow)|>
+  summarize(Count=n())#grouping by scientific knowledge
+wgm_sci_region2<-wgm_sci|>
+  filter(!is.na(AgeCategories))|>
+  group_by(Region,AgeCategories)|>
+  summarize(Total=n())
+wgm_sci_region<-left_join(wgm_sci_region,wgm_sci_region2)
+wgm_sci_age<-wgm_sci_region|>
+  mutate(Prop=Count/Total)|>
+  filter(SciKnow=="Lots"&Region!="Not assigned")|>
+  select(Region,AgeCategories,Prop)
+
+#Calculating World totals
+world_age_totals<-wgm_sci_age|>
+  group_by(AgeCategories)|>
+  summarize(Prop=mean(Prop))|>
+  mutate(Region="World")|>
+  relocate(Region,.before=AgeCategories)
+wgm_sci_age<-rbind(wgm_sci_age,world_age_totals)
+wgm_sci_age$Region<-factor(wgm_sci_age$Region,levels = c("World","Eastern Africa","Central Africa","North Africa","Southern Africa","Western Africa","Central America and Mexico","Northern America","South America","Central Asia","East Asia","Southeast Asia","South Asia","Middle East","Eastern Europe","Northern Europe","Southern Europe","Western Europe","Aus/NZ"))
+wgm_sci_age<-wgm_sci_age|>
+  mutate(AgeRange=case_when(
+    AgeCategories == 1 ~ "15 to 29",
+    AgeCategories == 2 ~ "30 to 49",
+    AgeCategories == 3 ~ "50+"
+  ))
+wgm_sci_age$AgeRange<-factor(wgm_sci_age$AgeRange,levels = c("50+","30 to 49","15 to 29"))
+
+#Plotting with gganimate
+ggplot(wgm_sci_age,aes(Prop*100,Region,fill=AgeRange),color="black")+
+  geom_bar(stat="identity",position = "dodge")+
+  scale_y_discrete(limits=rev)+
+  scale_fill_manual(values=c("#003366","#33CCCC","#FFCC00"))+
+  labs(x=NULL,y=NULL,title="Perceived knowledge about science by region and age group")+
+  theme_minimal()+
+  theme(legend.position = c(0.85,0.8),panel.grid.minor.x = element_blank(),panel.grid.major.y = element_blank(),text = element_text(size=12),panel.background = element_rect(fill = "beige",color = "beige"),plot.background = element_rect(fill="beige",color="beige"),panel.grid.major.x = element_line(linetype = "dashed",colour = "grey"),plot.title.position = "plot")+
+  transition_states(Region,wrap=F)+
+  shadow_mark()+
+  enter_fade()
 
 ```
