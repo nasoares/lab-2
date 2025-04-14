@@ -70,8 +70,11 @@ them in separately, but you may also just use one if it suffices.
 
 ```{r}
 #| label: read-in-wellcome-data
+#| message: false
 library(tidyverse)
 library(readxl)
+library(ggridges)
+library(RColorBrewer)
 wgm<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Full dataset")
 notes<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Data dictionary")
 
@@ -107,13 +110,25 @@ wgm_merge<-wgm_merge|>
     Q25 >= 3 ~ "NotPro"
   ))
 
+#Changing region groupings to match plot
+plotRegions<-data.frame(Region=unique(wgm_merge$Region),
+                        Plot=c("Americas","Middle East and North Africa","Middle East and North Africa","Asia","Asia","Europe","Europe","Europe","Former Soviet Union","Asia","Americas","Americas","Sub-Saharan Africa","Sub-Saharan Africa","Sub-Saharan Africa","Asia","Former Soviet Union","Sub-Saharan Africa","Not assigned"))
+wgm_merge<-left_join(wgm_merge,plotRegions)
+
 #Grouping by country for plotting
 wgm_country<-wgm_merge|>
-  group_by(Country,Region,VacView)|>
-  summarize(Count=n())
-wgm_country<-wgm_country|>
-  group_by(Country,Region)|>
-  summarize()#need proportions before plotting
+  group_by(Country,Plot,VacView)|>
+  summarize(Count=n())#grouping by vaccine outlook
+wgm_country2<-wgm_merge|>
+  group_by(Country,Plot)|>
+  summarize(Total=n())#total records from each country
+
+#final merge and calculation of proportions
+wgm_country<-left_join(wgm_country,wgm_country2)
+wgm_props<-wgm_country|>
+  mutate(Prop=Count/Total)|>
+  filter(VacView=="Pro",Plot!="Not assigned")
+wgm_props$Plot<-factor(wgm_props$Plot,levels = c("Asia","Middle East and North Africa","Sub-Saharan Africa","Americas","Europe","Former Soviet Union"))
 ```
 
 6. Improve the visualization above by either re-creating it with the issues you
@@ -122,7 +137,17 @@ same story better.
 
 ```{r}
 #| label: new-and-improved-visualization
+#| message: false
 
+ggplot(wgm_props,aes(Prop*100,Plot,fill = Plot))+
+  geom_density_ridges()+ #easier to visualize than points and less busy
+  geom_text(data=wgm_props,aes(label = Plot,x=10,hjust=0,vjust=-2))+
+  scale_fill_brewer(palette = "Dark2")+ #color-blind friendly
+  scale_y_discrete(limits=rev)+
+  scale_x_continuous(breaks = seq(20,100,20))+
+  labs(x=NULL,y=NULL,title=str_wrap("% of people who believe vaccines are safe, by global region",width = 42))+
+  theme_minimal()+
+  theme(legend.position="none",axis.text.y = element_blank(),text = element_text(size=15),panel.background = element_rect(fill = "lightgrey",color = "lightgrey"),plot.background = element_rect(fill="lightgrey",color="lightgrey"),panel.grid.minor.x = element_blank(),panel.grid.major.y = element_blank())
 
 ```
 
