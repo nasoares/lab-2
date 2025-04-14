@@ -75,6 +75,9 @@ library(tidyverse)
 library(readxl)
 library(ggridges)
 library(RColorBrewer)
+library(leaflet)
+library(sf)
+library(viridisLite)
 wgm<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Full dataset")
 notes<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Data dictionary")
 
@@ -82,7 +85,7 @@ notes<-read_xlsx("wgm2018-dataset-crosstabs-all-countries.xlsx",sheet="Data dict
 
 #creating a new, filtered data frame
 wgm_filt<-wgm|>
-  select(c(WP5,wgt,PROJWT,FIELD_DATE,YEAR_CALENDAR,Q25,Regions_Report))|>
+  select(c(WP5,wgt,PROJWT,FIELD_DATE,YEAR_CALENDAR,Q1,Q25,AgeCategories,Regions_Report))|>
   filter(!is.na(Q25))
 
 #Handling the country codes
@@ -166,29 +169,78 @@ Be sure to cite both the page number and figure title. Do your best to tell the
 story of this graph in words. That is, what is this graph telling you? What do
 you think the authors meant to convey with it?
 
-
+I selected Chart 2.3: "Map of perceived knowledge about science by country" on page 27. This map displays the percentage of people in each country surveyed that answered "a lot" or "some" in response to being questioned on how much they know about science.
 
 8. List the variables that appear to be displayed in this visualization.
 
-
+Country and knowledge level are the primary variables. 
 
 9. Now that you're versed in the grammar of graphics (ggplot), list the
 aesthetics used and which variables are specified for each.
 
-
+If we were displaying data as a bar graph instead of a map, the aesthetics would be *x = "Country"*, *y = Knowledge Level* and/or *color = Knowledge Level*
 
 10. What type of graph would you call this?
 
+These data could be displayed with *geom_bar()*, but for the sake of this problem it was made into a chloropleth map using the leaflet package. 
 
+11. List all of the problems or things you would improve about this graph. 
 
-11. List all of the problems or things you would improve about this graph.  
+- The use of a monochromatic color bar makes it challenging to view the difference
+- Lack of interactivity makes it impossible to view the exact values by country
 
 12. Improve the visualization above by either re-creating it with the issues you identified fixed OR by creating a new visualization that you believe tells the same story better.
 
 ```{r}
 #| label: second-improved-visualization
+#| message: false
+#Data preparation
+wgm_sci<-wgm_merge|>
+  mutate(SciKnow=case_when(
+    Q1 <= 2 ~ "Lots",
+    Q1 >= 3 ~ "NotLots"
+  ))
+#Grouping by country for plotting
+wgm_sci_country<-wgm_sci|>
+  group_by(Country,SciKnow)|>
+  summarize(Count=n())#grouping by scientific knowledge
+wgm_sci_country<-left_join(wgm_sci_country,wgm_country2)
+wgm_sci_props<-wgm_sci_country|>
+  mutate(Prop=Count/Total*100)|>
+  filter(SciKnow=="Lots")|>
+  select(Country,Prop)
+colnames(wgm_sci_props)<-c("NAME","KnowLevel")
 
+#Bringing in chloropleth of countries
+world_sf<-read_sf("~/Cal Poly/Spring 2025/STAT 541 - Advanced Stats with R/Lab 2/lab-2/TM_WORLD_BORDERS_SIMPL-0.3.shp")
 
+wgm_sf<-world_sf|>
+  filter(NAME %in% unique(wgm_sci_props$NAME))
+wgm_sf<-left_join(wgm_sf,wgm_sci_props)
+
+#Creating a color palette to display data
+mypalette<-colorNumeric(
+  palette="viridis",domain=wgm_sf$KnowLevel,
+  na.color="transparent"
+)
+
+#Text labels
+mytext<-paste(
+  "Country: ",wgm_sf$NAME,"<br/>",
+  "Knowledge Level: ",round(wgm_sf$KnowLevel,0),"%","</br>",
+  sep=""
+)%>%
+  lapply(htmltools::HTML)
+
+leaflet(wgm_sf)%>%
+  addTiles()%>%
+  setView(lat=0,lng=0,zoom=0.5)%>%
+  addPolygons(fillColor = ~mypalette(KnowLevel),stroke = F,
+              label=mytext,fillOpacity = 0.9)%>%
+  addLegend(pal = mypalette,values=~KnowLevel,
+            title="Knowledge Level",position = "bottomleft",
+            opacity=0.9)
+  
 ```
 
 ## Third Data Visualization Improvement
@@ -201,9 +253,7 @@ story of this graph in words. That is, what is this graph telling you? What do
 you think the authors meant to convey with it?
 
 
-
 14. List the variables that appear to be displayed in this visualization.
-
 
 
 15. Now that you're versed in the grammar of graphics (ggplot), list the
